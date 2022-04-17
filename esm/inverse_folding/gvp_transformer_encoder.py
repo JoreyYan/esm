@@ -78,7 +78,9 @@ class GVPTransformerEncoder(nn.Module):
             confidence: confidence scores between 0 and 1 of shape length
         """
         components = dict()
+        #数值无限大的为mask
         coord_mask = torch.all(torch.all(torch.isfinite(coords), dim=-1), dim=-1)
+        #去掉不合适的coords
         coords = nan_to_num(coords)
         mask_tokens = (
             padding_mask * self.dictionary.padding_idx + 
@@ -86,16 +88,25 @@ class GVPTransformerEncoder(nn.Module):
         )
         components["tokens"] = self.embed_tokens(mask_tokens) * self.embed_scale
         components["diherals"] = self.embed_dihedrals(coords)
+        ### 上述这些 GVP里面都有，我应该用不到
+        
 
         # GVP encoder
         gvp_out_scalars, gvp_out_vectors = self.gvp_encoder(coords,
                 coord_mask, padding_mask, confidence)
+        # 输出的格式                - scalar: shape batch size x nodes x node_embed_dim
+        #- vector: shape batch size x nodes x node_embed_dim x 3
+        
         R = get_rotation_frames(coords)
-        # Rotate to local rotation frame for rotation-invariance
+        # Rotate to local rotation frame for rotation-invariance 在GVP里面三天生的旋转不变，这里要改为在transformer里面也旋转不变的
+        
+        # 将标量与向量特征整合在一起，这个也是 旋转等变，平移不变的
         gvp_out_features = torch.cat([
             gvp_out_scalars,
             rotate(gvp_out_vectors, R.transpose(-2, -1)).flatten(-2, -1),
         ], dim=-1)
+        
+        # 映射为 embeding维度
         components["gvp_out"] = self.embed_gvp_output(gvp_out_features)
 
         components["confidence"] = self.embed_confidence(
@@ -103,19 +114,25 @@ class GVPTransformerEncoder(nn.Module):
 
         # In addition to GVP encoder outputs, also directly embed GVP input node
         # features to the Transformer
+        # 输入节点的特征 向量和标量 上面那个是经过卷积了的  也就是原本的encoder部分
         scalar_features, vector_features = GVPInputFeaturizer.get_node_features(
             coords, coord_mask, with_coord_mask=False)
+        
+        
         features = torch.cat([
             scalar_features,
             rotate(vector_features, R.transpose(-2, -1)).flatten(-2, -1),
         ], dim=-1)
         components["gvp_input_features"] = self.embed_gvp_input_features(features)
 
+        
+        
         embed = sum(components.values())
         # for k, v in components.items():
         #     print(k, torch.mean(v, dim=(0,1)), torch.std(v, dim=(0,1)))
 
         x = embed
+        # 加入位置特征，按理说，原本就有的
         x = x + self.embed_positions(mask_tokens)
         x = self.dropout_module(x)
         return x, components 
@@ -133,9 +150,13 @@ class GVPTransformerEncoder(nn.Module):
                 shape batch_size x num_residues x num_atoms (3 for N, CA, C) x 3
             encoder_padding_mask (ByteTensor): the positions of
                   padding elements of shape `(batch_size x num_residues)`
+                  有一些点会mask掉，就算false，所以是和num_residues 一样长的
             confidence (Tensor): the confidence score of shape (batch_size x
                 num_residues). The value is between 0. and 1. for each residue
                 coordinate, or -1. if no coordinate is given
+                
+                按理说 残基的坐标，一开始三没有的
+                
             return_all_hiddens (bool, optional): also return all of the
                 intermediate hidden states (default: False).
 
@@ -143,14 +164,17 @@ class GVPTransformerEncoder(nn.Module):
             dict:
                 - **encoder_out** (Tensor): the last encoder layer's output of
                   shape `(num_residues, batch_size, embed_dim)`
+                  每一个node的编码
                 - **encoder_padding_mask** (ByteTensor): the positions of
-                  padding elements of shape `(batch_size, num_residues)`
+                  padding elements of shape `(batch_size, num_residues)` 这玩意还有啥用阿，和输入一样
                 - **encoder_embedding** (Tensor): the (scaled) embedding lookup
                   of shape `(batch_size, num_residues, embed_dim)`
                 - **encoder_states** (List[Tensor]): all intermediate
                   hidden states of shape `(num_residues, batch_size, embed_dim)`.
                   Only populated if *return_all_hiddens* is True.
         """
+        
+        # 这是经过了 gvp卷积，并且还将向量取消了的特征
         x, encoder_embedding = self.forward_embedding(coords,
                 encoder_padding_mask, confidence)
         # account for padding while computing the representation
@@ -161,17 +185,17 @@ class GVPTransformerEncoder(nn.Module):
 
         encoder_states = []
 
-        if return_all_hiddens:
-            encoder_states.append(x)
+#         if return_all_hiddens:
+#             encoder_states.append(x)
 
-        # encoder layers
+        # encoder layers  开始transfomer encoeder了 
         for layer in self.layers:
             x = layer(
                 x, encoder_padding_mask=encoder_padding_mask
             )
-            if return_all_hiddens:
-                assert encoder_states is not None
-                encoder_states.append(x)
+#             if return_all_hiddens:
+#                 assert encoder_states is not None
+#                 encoder_states.append(x)
 
         if self.layer_norm is not None:
             x = self.layer_norm(x)
