@@ -77,6 +77,8 @@ class GVPTransformerModel(nn.Module):
     ):
         encoder_out = self.encoder(coords, padding_mask, confidence,
             return_all_hiddens=return_all_hiddens)
+        
+        #decoder的训练
         logits, extra = self.decoder(
             prev_output_tokens,
             encoder_out=encoder_out,
@@ -112,7 +114,7 @@ class GVPTransformerModel(nn.Module):
         # Run encoder only once
         encoder_out = self.encoder(batch_coords, padding_mask, confidence)
         
-        # Decode one token at a time
+        # 对全序列长度，一次运行一个 Decode one token at a time
         for i in range(1, L+1):
             logits, _ = self.decoder(
                 sampled_tokens[:, :i], 
