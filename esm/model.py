@@ -125,21 +125,10 @@ class ProteinBertModel(nn.Module):
 
         x = self.embed_scale * self.embed_tokens(tokens)
 
-        if getattr(self.args, "token_dropout", False):
-            x.masked_fill_((tokens == self.mask_idx).unsqueeze(-1), 0.0)
-            # x: B x T x C
-            mask_ratio_train = 0.15 * 0.8
-            src_lengths = (~padding_mask).sum(-1)
-            mask_ratio_observed = (tokens == self.mask_idx).sum(-1).float() / src_lengths
-            x = x * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
-
+#     
         x = x + self.embed_positions(tokens)
 
-        if self.model_version == "ESM-1b":
-            if self.emb_layer_norm_before:
-                x = self.emb_layer_norm_before(x)
-            if padding_mask is not None:
-                x = x * (1 - padding_mask.unsqueeze(-1).type_as(x))
+
 
         repr_layers = set(repr_layers)
         hidden_representations = {}
