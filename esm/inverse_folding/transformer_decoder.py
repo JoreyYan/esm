@@ -113,7 +113,7 @@ class TransformerDecoder(nn.Module):
                 - the decoder's output of shape `(batch, tgt_len, vocab)`
                 - a dictionary with any model-specific outputs
         """
-
+        #上来就是extract 
         x, extra = self.extract_features(
             prev_output_tokens,
             encoder_out=encoder_out,
@@ -154,7 +154,7 @@ class TransformerDecoder(nn.Module):
         if encoder_out is not None and len(encoder_out["encoder_padding_mask"]) > 0:
             padding_mask = encoder_out["encoder_padding_mask"][0]
 
-        # embed positions
+        # embed positions  给前面的几个加上位置映射
         positions = self.embed_positions(
             prev_output_tokens
         )
@@ -165,7 +165,8 @@ class TransformerDecoder(nn.Module):
 
         # embed tokens and positions
         x = self.embed_scale * self.embed_tokens(prev_output_tokens)
-
+        
+        #线性的映射，将encoder的数据维度映射回去
         if self.project_in_dim is not None:
             x = self.project_in_dim(x)
 
@@ -180,15 +181,16 @@ class TransformerDecoder(nn.Module):
         if prev_output_tokens.eq(self.padding_idx).any():
             self_attn_padding_mask = prev_output_tokens.eq(self.padding_idx)
 
-        # decoder layers
+        # decoder layers 与encoder是对偶的
         attn: Optional[Tensor] = None
-        inner_states: List[Optional[Tensor]] = [x]
+        inner_states: List[Optional[Tensor]] = [x]  #前一次的预测结果，加过来
         for idx, layer in enumerate(self.layers):
             if incremental_state is None:
                 self_attn_mask = self.buffered_future_mask(x)
             else:
                 self_attn_mask = None
-
+            
+            # decoder的输出，也可以看作是预测   但x也是seq长度的，所以一次也是预测了一个序列
             x, layer_attn, _ = layer(
                 x,
                 enc,
@@ -206,7 +208,7 @@ class TransformerDecoder(nn.Module):
 
         # T x B x C -> B x C x T
         x = x.transpose(0, 1)
-
+        #x的维度是B x C x T
         return x, {"inner_states": inner_states}
 
     def output_layer(self, features):
