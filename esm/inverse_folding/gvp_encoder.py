@@ -51,6 +51,9 @@ class GVPEncoder(nn.Module):
         for i, layer in enumerate(self.encoder_layers):
             node_embeddings, edge_embeddings = layer(node_embeddings,
                     edge_index, edge_embeddings)
-
+        
+        # 点边同时修正 size，成为 batchsize*-1*node_embed_dim//batchsize*-1*node_embed_dim*3
         node_embeddings = unflatten_graph(node_embeddings, coords.shape[0])
-        return node_embeddings
+        edge_embeddings = unflatten_graph(edge_embeddings, coords.shape[0])
+        
+        return node_embeddings,edge_embeddings
