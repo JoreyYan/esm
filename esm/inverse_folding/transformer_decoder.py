@@ -163,15 +163,18 @@ class TransformerDecoder(nn.Module):
             prev_output_tokens = prev_output_tokens[:, -1:]
             positions = positions[:, -1:]
 
-        # embed tokens and positions
+        # embed tokens and positions  self.embed_tokens只是一个embedding 比如前面是A ,那可能就是一个one hot的映射
+        
         x = self.embed_scale * self.embed_tokens(prev_output_tokens)
+        # 这里的embed_scale=math.sqrt(embed_dim)
+        
         
         #线性的映射，将encoder的数据维度映射回去
         if self.project_in_dim is not None:
             x = self.project_in_dim(x)
 
         x += positions
-
+        # https://zhuanlan.zhihu.com/p/121662739 就是图的最下面
         x = self.dropout_module(x)
 
         # B x T x C -> T x B x C
@@ -190,7 +193,7 @@ class TransformerDecoder(nn.Module):
             else:
                 self_attn_mask = None
             
-            # decoder的输出，也可以看作是预测   但x也是seq长度的，所以一次也是预测了一个序列
+            # decoder的输出，也可以看作是预测   但x也是seq长度的，所以一次也是预测了一个序列  
             x, layer_attn, _ = layer(
                 x,
                 enc,
