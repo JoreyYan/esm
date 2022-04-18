@@ -92,42 +92,65 @@ class GVPTransformerEncoder(nn.Module):
         
 
         # GVP encoder
-        gvp_out_scalars, gvp_out_vectors = self.gvp_encoder(coords,
+        node_embeddings,edge_embeddings= self.gvp_encoder(coords,
                 coord_mask, padding_mask, confidence)
-        # 输出的格式                - scalar: shape batch size x nodes x node_embed_dim
+        
+        #分别获得点的信息和边的信息
+        gvp_x_out_scalars, gvp_x_out_vectors =node_embeddings[0],node_embeddings[1]
+        gvp_edge_out_scalars, gvp_edge_out_vectors =edge_embeddings[0],edge_embeddings[1]
+        
+        
+        # 输出的格式
+        #- scalar: shape batch size x nodes x node_embed_dim
         #- vector: shape batch size x nodes x node_embed_dim x 3
+        
+        
+        
         
         R = get_rotation_frames(coords)
         # Rotate to local rotation frame for rotation-invariance 在GVP里面三天生的旋转不变，这里要改为在transformer里面也旋转不变的
         
-        # 将标量与向量特征整合在一起，这个也是 旋转等变，平移不变的
-        gvp_out_features = torch.cat([
-            gvp_out_scalars,
-            rotate(gvp_out_vectors, R.transpose(-2, -1)).flatten(-2, -1),
+        # 将标量与向量特征整合在一起，这个也是 旋转不变，平移不变的
+        gvp_x_out_features = torch.cat([
+            gvp_x_out_scalars,
+            rotate(gvp_x_out_vectors, R.transpose(-2, -1)).flatten(-2, -1),
         ], dim=-1)
         
+        gvp_edge_out_features = torch.cat([
+            gvp_edge_out_scalars,
+            rotate(gvp_edge_out_vectors, R.transpose(-2, -1)).flatten(-2, -1),
+        ], dim=-1)
+        
+        
+        
         # 映射为 embeding维度
-        components["gvp_out"] = self.embed_gvp_output(gvp_out_features)
+        components["gvp_x_out"] = self.embed_gvp_output(gvp_x_out_features)
+        components["gvp_edge_out"] = self.embed_gvp_output(gvp_edge_out_features)
 
+        #这个是只有在alphafold增强训练的时候才有的
         components["confidence"] = self.embed_confidence(
              rbf(confidence, 0., 1.))
 
         # In addition to GVP encoder outputs, also directly embed GVP input node
         # features to the Transformer
         # 输入节点的特征 向量和标量 上面那个是经过卷积了的  也就是原本的encoder部分
-        scalar_features, vector_features = GVPInputFeaturizer.get_node_features(
+        #这里是将GVP的几个向量特征用toch.cat[] 整合到一起了
+        x_scalar_features, x_vector_features = GVPInputFeaturizer_S_V.get_node_features(
             coords, coord_mask, with_coord_mask=False)
         
-        
-        features = torch.cat([
-            scalar_features,
-            rotate(vector_features, R.transpose(-2, -1)).flatten(-2, -1),
+        ######################################################尚未添加 EDGE特征#######################################
+        x_features = torch.cat([
+            x_scalar_features,
+            rotate(x_vector_features, R.transpose(-2, -1)).flatten(-2, -1),
         ], dim=-1)
-        components["gvp_input_features"] = self.embed_gvp_input_features(features)
-
+        components["gvp_x_input_features"] = self.embed_gvp_input_features(x_features)
+        ######################################################尚未添加 EDGE特征#######################################
         
         
-        embed = sum(components.values())
+        
+        
+        #？？？？？？？？？？？？？？？？直接加加和特征有意义吗？
+        embed = sum(components.values())  
         # for k, v in components.items():
         #     print(k, torch.mean(v, dim=(0,1)), torch.std(v, dim=(0,1)))
 
@@ -183,8 +206,7 @@ class GVPTransformerEncoder(nn.Module):
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
 
-        encoder_states = []
-
+#         encoder_states = []
 #         if return_all_hiddens:
 #             encoder_states.append(x)
 
