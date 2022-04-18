@@ -137,7 +137,7 @@ def get_encoder_output(model, alphabet, coords):
 def rotate(v, R):
     """
     Rotates a vector by a rotation matrix.
-    
+    框架下旋转的向量
     Args:
         v: 3D vector, tensor of shape (length x batch_size x channels x 3)
         R: rotation matrix, tensor of shape (length x batch_size x 3 x 3)
@@ -153,7 +153,8 @@ def rotate(v, R):
 def get_rotation_frames(coords):
     """
     Returns a local rotation frame defined by N, CA, C positions.
-
+    https://zhuanlan.zhihu.com/p/427205686
+    这个地方是类似alphafold2 每三个原子构成 一个三形成，初始化的同时，就确定了朝向，方便后面的旋转不变
     Args:
         coords: coordinates, tensor of shape (batch_size x length x 3 x 3)
         where the third dimension is in order of N, CA, C
